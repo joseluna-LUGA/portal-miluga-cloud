@@ -406,6 +406,10 @@ function renderSettings() {
         <span>${COMPANY.address}</span>
       </div>
     </section>
+    <section class="panel">
+      <h2>Correos</h2>
+      <p>Las cotizaciones y ordenes se envian desde Supabase con el remitente no-reply@miluga.com.mx. La llave privada del proveedor de correo debe estar guardada como secreto de Supabase.</p>
+    </section>
     <section class="panel warning">
       <h2>Seguridad</h2>
       <p>No pongas claves privadas CSD, passwords PAC, Gmail tokens ni service_role key en archivos publicos. Eso va en backend o secretos del proveedor.</p>
@@ -451,14 +455,24 @@ function renderUserRow(user) {
 
 function renderDocumentList(records, kind) {
   if (!records.length) return `<p class="muted">Sin registros guardados.</p>`;
+  const canEmail = ["quote", "order"].includes(kind);
   return `<div class="record-list">${records.map((item) => `
     <div class="record-row">
       <strong>${escapeHtml(item.folio || "")}</strong>
       <span>${escapeHtml(item.client_name || item.receiver_name || "")}</span>
       <span>${formatMoney(item.total || 0)}</span>
-      <button class="ghost" data-print="${kind}" data-id="${item.id}">Imprimir</button>
+      <div class="record-actions">
+        ${canEmail ? emailButton(kind, item) : ""}
+        <button class="ghost" data-print="${kind}" data-id="${item.id}">Imprimir</button>
+      </div>
     </div>
   `).join("")}</div>`;
+}
+
+function emailButton(kind, item) {
+  const email = String(item.client_email || "").trim();
+  const title = email ? `Enviar a ${email}` : "Este registro no tiene correo de cliente";
+  return `<button class="ghost" data-email="${kind}" data-id="${item.id}" title="${escapeHtml(title)}" ${email ? "" : "disabled"}>Enviar correo</button>`;
 }
 
 function clientDatalist() {
@@ -505,6 +519,10 @@ function bindEvents() {
 
   app.querySelectorAll("[data-print]").forEach((button) => {
     button.addEventListener("click", () => printRecord(button.dataset.print, button.dataset.id));
+  });
+
+  app.querySelectorAll("[data-email]").forEach((button) => {
+    button.addEventListener("click", () => sendDocumentEmail(button.dataset.email, button.dataset.id, button));
   });
 }
 
@@ -555,6 +573,53 @@ async function createPortalUser(event) {
   form.reset();
   await loadCloudData();
   render();
+}
+
+async function sendDocumentEmail(kind, id, button) {
+  if (!state.cloudReady || !state.session) {
+    alert("Inicia sesion en Supabase para enviar correos.");
+    return;
+  }
+
+  const collection = kind === "quote" ? state.data.quotes : kind === "order" ? state.data.orders : [];
+  const record = collection.find((item) => item.id === id);
+  if (!record) {
+    alert("No encontre este documento guardado.");
+    return;
+  }
+
+  const email = String(record.client_email || "").trim();
+  if (!email) {
+    alert("Este documento no tiene correo de cliente.");
+    return;
+  }
+
+  const label = kind === "quote" ? "cotizacion" : "orden";
+  if (!window.confirm(`Enviar ${label} ${record.folio || ""} a ${email}?`)) return;
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Enviando...";
+
+  try {
+    const { data, error } = await state.supabase.functions.invoke("send-document-email", {
+      body: { kind, id },
+      headers: {
+        Authorization: `Bearer ${state.session?.access_token || ""}`,
+      },
+    });
+
+    if (error || data?.error) {
+      throw new Error(data?.error || error?.message || "No se pudo enviar el correo.");
+    }
+
+    alert(`Correo enviado a ${data?.sentTo || email}.`);
+  } catch (error) {
+    alert(error?.message || "No se pudo enviar el correo.");
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
 }
 
 async function loadCloudData() {
