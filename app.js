@@ -246,6 +246,7 @@ function renderQuotes() {
     <section class="panel">
       <div class="section-title">
         <h2>Nueva cotizacion</h2>
+        <button class="secondary" data-action="load-imss-quote">Cargar cotizacion recuperada</button>
       </div>
       <form id="quote-form" class="stack">
         <div class="grid">
@@ -513,6 +514,8 @@ function bindEvents() {
     body.insertAdjacentHTML("beforeend", invoiceItemRow());
     bindRowRemoveButtons(body);
   });
+  app.querySelector('[data-action="load-imss-quote"]')?.addEventListener("click", loadRecoveredQuote);
+
   app.querySelectorAll('[data-action="remove-row"]').forEach((button) => {
     button.addEventListener("click", () => button.closest("tr")?.remove());
   });
@@ -859,6 +862,19 @@ function upsertLocalClient(base) {
     email: base.client_email || "",
     created_at: new Date().toISOString(),
   });
+}
+
+async function loadRecoveredQuote() {
+  const response = await fetch("./data/cotizacion-imss-clinica-28.json");
+  const data = await response.json();
+  const form = document.querySelector("#quote-form");
+  form.client_name.value = data.client_name;
+  form.client_rfc.value = data.client_tax_id;
+  form.client_email.value = data.client_email || "";
+  form.project_name.value = data.project_name;
+  const body = form.querySelector("#quote-items tbody");
+  body.innerHTML = data.items.map((item) => quoteItemRow(item)).join("");
+  bindRowRemoveButtons(body);
 }
 
 function bindRowRemoveButtons(root) {
