@@ -12,8 +12,11 @@ Este paquete esta preparado para GitHub Pages. Incluye solamente los archivos pu
 - `supabase-config.js`
 - `assets/logo-luga.jpeg`
 - `data/cotizacion-imss-clinica-28.json`
+- `CNAME`
 
 No incluye archivos SQL, funciones de Supabase ni configuracion local de la computadora.
+
+URL publica esperada: `https://portal.miluga.com.mx`
 
 ## Correos
 
