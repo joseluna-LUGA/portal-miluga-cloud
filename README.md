@@ -11,8 +11,9 @@ Este paquete esta preparado para GitHub Pages. Incluye solamente los archivos pu
 - `styles.css`
 - `supabase-config.js`
 - `assets/logo-luga.jpeg`
+- `data/cotizacion-imss-clinica-28.json`
 
-No incluye cotizaciones recuperadas, archivos SQL, funciones de Supabase ni configuracion local de la computadora.
+No incluye archivos SQL, funciones de Supabase ni configuracion local de la computadora.
 
 ## Correos
 
