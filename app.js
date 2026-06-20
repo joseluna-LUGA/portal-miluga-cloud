@@ -12,6 +12,31 @@ const COMPANY = {
   taxRate: 0.16,
 };
 
+const FISCAL_REGIMES = [
+  ["601", "General de Ley Personas Morales"],
+  ["603", "Personas Morales con Fines no Lucrativos"],
+  ["605", "Sueldos y Salarios e Ingresos Asimilados a Salarios"],
+  ["606", "Arrendamiento"],
+  ["607", "Regimen de Enajenacion o Adquisicion de Bienes"],
+  ["608", "Demas ingresos"],
+  ["610", "Residentes en el Extranjero sin Establecimiento Permanente en Mexico"],
+  ["611", "Ingresos por Dividendos (socios y accionistas)"],
+  ["612", "Personas Fisicas con Actividades Empresariales y Profesionales"],
+  ["614", "Ingresos por intereses"],
+  ["615", "Regimen de los ingresos por obtencion de premios"],
+  ["616", "Sin obligaciones fiscales"],
+  ["620", "Sociedades Cooperativas de Produccion que optan por diferir sus ingresos"],
+  ["621", "Incorporacion Fiscal"],
+  ["622", "Actividades Agricolas, Ganaderas, Silvicolas y Pesqueras"],
+  ["623", "Opcional para Grupos de Sociedades"],
+  ["624", "Coordinados"],
+  ["625", "Regimen de las Actividades Empresariales con ingresos a traves de Plataformas Tecnologicas"],
+  ["626", "Regimen Simplificado de Confianza"],
+  ["628", "Hidrocarburos"],
+  ["629", "De los Regimenes Fiscales Preferentes y de las Empresas Multinacionales"],
+  ["630", "Enajenacion de acciones en bolsa de valores"],
+];
+
 const LOCAL_KEY = "miluga_cloud_demo_v1";
 const app = document.querySelector("#app");
 
@@ -148,6 +173,22 @@ function navButton(tab, label) {
   return `<button class="${state.tab === tab ? "active" : ""}" data-tab="${tab}">${label}</button>`;
 }
 
+function fiscalRegimeSelect(name, selected = "", options = {}) {
+  const selectedValue = String(selected || options.defaultValue || "");
+  const required = options.required ? " required" : "";
+  const placeholder = options.placeholder || "Selecciona regimen";
+  const hasStoredValue = selectedValue && !FISCAL_REGIMES.some(([code]) => code === selectedValue);
+  return `
+    <select name="${escapeHtml(name)}"${required}>
+      <option value="">${escapeHtml(placeholder)}</option>
+      ${hasStoredValue ? `<option value="${escapeHtml(selectedValue)}" selected>${escapeHtml(selectedValue)}</option>` : ""}
+      ${FISCAL_REGIMES.map(([code, label]) => `
+        <option value="${code}" ${selectedValue === code ? "selected" : ""}>${code} - ${escapeHtml(label)}</option>
+      `).join("")}
+    </select>
+  `;
+}
+
 function renderTab() {
   if (state.tab === "clients") return renderClients();
   if (state.tab === "quotes") return renderQuotes();
@@ -219,7 +260,7 @@ function renderClients() {
         <label>Correo<input name="email" type="email"></label>
         <label>Telefono<input name="phone"></label>
         <label>Codigo postal fiscal<input name="fiscal_zip"></label>
-        <label>Regimen fiscal<input name="regime"></label>
+        <label>Regimen fiscal${fiscalRegimeSelect("regime")}</label>
         <label class="wide">Direccion<textarea name="address" rows="3"></textarea></label>
         <button class="primary" type="submit">Guardar cliente</button>
       </form>
@@ -349,7 +390,7 @@ function renderInvoices() {
           <label>RFC receptor<input name="receiver_rfc" required></label>
           <label>Nombre receptor<input name="receiver_name" required list="clients-list" autocomplete="off"></label>
           <label>Correo receptor<input name="receiver_email" type="email"></label>
-          <label>Regimen receptor<input name="receiver_regime" value="601"></label>
+          <label>Regimen receptor${fiscalRegimeSelect("receiver_regime", "601", { required: true })}</label>
           <label>CP fiscal<input name="receiver_zip"></label>
           <label>Uso CFDI<input name="cfdi_use" value="G03"></label>
           <label>Metodo de pago<input name="payment_method" value="PUE"></label>
