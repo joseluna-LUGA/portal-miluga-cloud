@@ -496,8 +496,8 @@ function renderUserRow(user) {
 }
 
 function renderDocumentList(records, kind) {
-  if (!records.length) return `<p class="muted">Sin registros guardados.</p>`;
   const canEmail = ["quote", "order"].includes(kind);
+  if (!records.length) return `<p class="muted">Sin registros guardados.</p>`;
   return `<div class="record-list">${records.map((item) => `
     <div class="record-row">
       <strong>${escapeHtml(item.folio || "")}</strong>
@@ -514,7 +514,7 @@ function renderDocumentList(records, kind) {
 function emailButton(kind, item) {
   const email = String(item.client_email || "").trim();
   const title = email ? `Enviar a ${email}` : "Este registro no tiene correo de cliente";
-  return `<button class="ghost" data-email="${kind}" data-id="${item.id}" title="${escapeHtml(title)}" ${email ? "" : "disabled"}>Enviar correo</button>`;
+  return `<button class="secondary email-action" data-email="${kind}" data-id="${item.id}" title="${escapeHtml(title)}" ${email ? "" : "disabled"}>Enviar por correo</button>`;
 }
 
 function clientDatalist() {

@@ -318,6 +318,12 @@ textarea {
   border-color: var(--line);
 }
 
+.email-action {
+  color: white;
+  background: var(--ok);
+  border-color: var(--ok);
+}
+
 .actions,
 .section-title {
   display: flex;
