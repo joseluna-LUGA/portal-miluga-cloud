@@ -37,6 +37,65 @@ const FISCAL_REGIMES = [
   ["630", "Enajenacion de acciones en bolsa de valores"],
 ];
 
+const PAYROLL_TYPES = [
+  ["O", "Ordinaria"],
+  ["E", "Extraordinaria"],
+];
+
+const PAYROLL_FREQUENCIES = [
+  ["01", "Diario"],
+  ["02", "Semanal"],
+  ["03", "Catorcenal"],
+  ["04", "Quincenal"],
+  ["05", "Mensual"],
+  ["99", "Otra periodicidad"],
+];
+
+const CONTRACT_TYPES = [
+  ["01", "Contrato de trabajo por tiempo indeterminado"],
+  ["02", "Contrato de trabajo para obra determinada"],
+  ["03", "Contrato de trabajo por tiempo determinado"],
+  ["04", "Contrato de trabajo por temporada"],
+  ["09", "Modalidades de contratacion"],
+  ["10", "Jubilacion, pension, retiro"],
+  ["99", "Otro contrato"],
+];
+
+const WORKDAY_TYPES = [
+  ["01", "Diurna"],
+  ["02", "Nocturna"],
+  ["03", "Mixta"],
+  ["04", "Por hora"],
+  ["05", "Reducida"],
+  ["06", "Continuada"],
+  ["07", "Partida"],
+  ["08", "Por turnos"],
+  ["99", "Otra jornada"],
+];
+
+const EMPLOYEE_REGIMES = [
+  ["02", "Sueldos"],
+  ["03", "Jubilados"],
+  ["04", "Pensionados"],
+  ["05", "Asimilados miembros sociedades cooperativas"],
+  ["06", "Asimilados integrantes sociedades y asociaciones civiles"],
+  ["07", "Asimilados miembros consejos"],
+  ["08", "Asimilados comisionistas"],
+  ["09", "Asimilados honorarios"],
+  ["10", "Asimilados acciones"],
+  ["11", "Asimilados otros"],
+  ["99", "Otro regimen"],
+];
+
+const JOB_RISK_CLASSES = [
+  ["1", "Clase I"],
+  ["2", "Clase II"],
+  ["3", "Clase III"],
+  ["4", "Clase IV"],
+  ["5", "Clase V"],
+  ["99", "No aplica"],
+];
+
 const LOCAL_KEY = "miluga_cloud_demo_v1";
 const app = document.querySelector("#app");
 
@@ -53,6 +112,8 @@ const state = {
     quoteItems: [],
     orders: [],
     invoices: [],
+    payrollEmployees: [],
+    payrollReceipts: [],
     users: [],
   },
 };
@@ -111,6 +172,7 @@ function render() {
           ${navButton("quotes", "Cotizador")}
           ${navButton("orders", "Ordenes")}
           ${navButton("invoices", "Facturas")}
+          ${navButton("payroll", "Nominas")}
           ${state.isAdmin ? navButton("users", "Usuarios") : ""}
           ${navButton("settings", "Configuracion")}
         </nav>
@@ -155,6 +217,7 @@ function renderHeader() {
     quotes: "Cotizador",
     orders: "Ordenes de servicio",
     invoices: "Facturas",
+    payroll: "Nominas",
     users: "Usuarios",
     settings: "Configuracion",
   };
@@ -189,11 +252,28 @@ function fiscalRegimeSelect(name, selected = "", options = {}) {
   `;
 }
 
+function catalogSelect(name, catalog, selected = "", options = {}) {
+  const selectedValue = String(selected || options.defaultValue || "");
+  const required = options.required ? " required" : "";
+  const placeholder = options.placeholder || "Selecciona opcion";
+  const hasStoredValue = selectedValue && !catalog.some(([code]) => code === selectedValue);
+  return `
+    <select name="${escapeHtml(name)}"${required}>
+      <option value="">${escapeHtml(placeholder)}</option>
+      ${hasStoredValue ? `<option value="${escapeHtml(selectedValue)}" selected>${escapeHtml(selectedValue)}</option>` : ""}
+      ${catalog.map(([code, label]) => `
+        <option value="${code}" ${selectedValue === code ? "selected" : ""}>${code} - ${escapeHtml(label)}</option>
+      `).join("")}
+    </select>
+  `;
+}
+
 function renderTab() {
   if (state.tab === "clients") return renderClients();
   if (state.tab === "quotes") return renderQuotes();
   if (state.tab === "orders") return renderOrders();
   if (state.tab === "invoices") return renderInvoices();
+  if (state.tab === "payroll") return renderPayroll();
   if (state.tab === "users") return state.isAdmin ? renderUsers() : renderDashboard();
   if (state.tab === "settings") return renderSettings();
   return renderDashboard();
@@ -206,6 +286,7 @@ function renderDashboard() {
       ${metric("Cotizaciones", state.data.quotes.length)}
       ${metric("Ordenes", state.data.orders.length)}
       ${metric("Facturas", state.data.invoices.length)}
+      ${metric("Nominas", state.data.payrollReceipts.length)}
     </div>
     <div class="two-col">
       <section class="panel">
@@ -214,7 +295,7 @@ function renderDashboard() {
           <span>1. Captura cliente</span>
           <span>2. Genera cotizacion u orden</span>
           <span>3. Imprime / guarda PDF</span>
-          <span>4. Prepara factura CFDI</span>
+          <span>4. Prepara factura CFDI o recibo de nomina</span>
         </div>
       </section>
       <section class="panel">
@@ -239,6 +320,7 @@ function renderRecentList() {
     ...state.data.quotes.map((item) => ({ type: "Cotizacion", folio: item.folio, name: item.client_name, date: item.created_at })),
     ...state.data.orders.map((item) => ({ type: "Orden", folio: item.folio, name: item.client_name, date: item.created_at })),
     ...state.data.invoices.map((item) => ({ type: "Factura", folio: item.folio, name: item.receiver_name, date: item.created_at })),
+    ...state.data.payrollReceipts.map((item) => ({ type: "Nomina", folio: item.folio, name: item.employee_name, date: item.created_at })),
   ].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 8);
 
   if (!records.length) return `<p class="muted">Todavia no hay movimientos guardados.</p>`;
@@ -429,6 +511,125 @@ function invoiceItemRow(item = {}) {
   `;
 }
 
+function renderPayroll() {
+  return `
+    <section class="panel warning">
+      <strong>Nomina pre-timbrado</strong>
+      <p>Este modulo prepara empleados, recibos, PDF imprimible y XML preliminar. El sellado con CSD y timbrado PAC se conectan despues desde backend seguro.</p>
+    </section>
+    <section class="panel">
+      <h2>Nuevo empleado</h2>
+      <form id="payroll-employee-form" class="grid">
+        <label>Numero empleado<input name="employee_number" required></label>
+        <label>Nombre completo<input name="full_name" required></label>
+        <label>RFC<input name="rfc" required></label>
+        <label>CURP<input name="curp" required></label>
+        <label>NSS<input name="nss"></label>
+        <label>Correo<input name="email" type="email"></label>
+        <label>Telefono<input name="phone"></label>
+        <label>CP fiscal<input name="fiscal_zip"></label>
+        <label>Fecha ingreso<input name="start_date" type="date"></label>
+        <label>Departamento<input name="department"></label>
+        <label>Puesto<input name="position"></label>
+        <label>Tipo contrato${catalogSelect("contract_type", CONTRACT_TYPES, "01", { required: true })}</label>
+        <label>Tipo jornada${catalogSelect("workday_type", WORKDAY_TYPES, "01")}</label>
+        <label>Regimen empleado${catalogSelect("employee_regime", EMPLOYEE_REGIMES, "02", { required: true })}</label>
+        <label>Periodicidad${catalogSelect("payment_frequency", PAYROLL_FREQUENCIES, "04", { required: true })}</label>
+        <label>Riesgo puesto${catalogSelect("risk_class", JOB_RISK_CLASSES, "1")}</label>
+        <label>Salario diario<input name="daily_salary" type="number" step="0.01" value="0"></label>
+        <label>Salario base cotizacion<input name="base_salary" type="number" step="0.01" value="0"></label>
+        <button class="primary" type="submit">Guardar empleado</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>Empleados guardados</h2>
+      ${state.data.payrollEmployees.length ? `<div class="record-list">${state.data.payrollEmployees.map(renderPayrollEmployeeRow).join("")}</div>` : `<p class="muted">Sin empleados guardados.</p>`}
+    </section>
+    <section class="panel">
+      <h2>Nuevo recibo de nomina</h2>
+      <form id="payroll-form" class="stack">
+        <div class="grid">
+          <input name="employee_id" type="hidden">
+          <label>Empleado<input name="employee_name" required list="payroll-employees-list" autocomplete="off"></label>
+          <label>RFC<input name="employee_rfc" required></label>
+          <label>CURP<input name="employee_curp" required></label>
+          <label>NSS<input name="employee_nss"></label>
+          <label>Fecha pago<input name="payment_date" type="date" required></label>
+          <label>Periodo inicio<input name="period_start" type="date" required></label>
+          <label>Periodo fin<input name="period_end" type="date" required></label>
+          <label>Dias pagados<input name="paid_days" type="number" step="0.001" value="15" required></label>
+          <label>Tipo nomina${catalogSelect("payroll_type", PAYROLL_TYPES, "O", { required: true })}</label>
+          <label>Periodicidad${catalogSelect("payment_frequency", PAYROLL_FREQUENCIES, "04", { required: true })}</label>
+          <label>Tipo contrato${catalogSelect("contract_type", CONTRACT_TYPES, "01")}</label>
+          <label>Regimen empleado${catalogSelect("employee_regime", EMPLOYEE_REGIMES, "02")}</label>
+          <label>Departamento<input name="department"></label>
+          <label>Puesto<input name="position"></label>
+          <label>Salario diario<input name="daily_salary" type="number" step="0.01" value="0"></label>
+          <label>Salario base cotizacion<input name="base_salary" type="number" step="0.01" value="0"></label>
+        </div>
+        ${payrollEmployeeDatalist()}
+        <div class="table-wrap">
+          <table class="edit-table" id="payroll-perceptions">
+            <thead><tr><th>Tipo SAT</th><th>Concepto</th><th>Gravado</th><th>Exento</th><th></th></tr></thead>
+            <tbody>${payrollPerceptionRow()}</tbody>
+          </table>
+        </div>
+        <div class="actions">
+          <button class="secondary" type="button" data-action="add-payroll-perception">Agregar percepcion</button>
+        </div>
+        <div class="table-wrap">
+          <table class="edit-table" id="payroll-deductions">
+            <thead><tr><th>Tipo SAT</th><th>Concepto</th><th>Importe</th><th></th></tr></thead>
+            <tbody>${payrollDeductionRow()}</tbody>
+          </table>
+        </div>
+        <div class="actions">
+          <button class="secondary" type="button" data-action="add-payroll-deduction">Agregar deduccion</button>
+          <button class="primary" type="submit">Guardar recibo</button>
+        </div>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>Recibos guardados</h2>
+      ${renderDocumentList(state.data.payrollReceipts, "payroll")}
+    </section>
+  `;
+}
+
+function renderPayrollEmployeeRow(employee) {
+  return `
+    <div class="record-row">
+      <strong>${escapeHtml(employee.employee_number || "")}</strong>
+      <span>${escapeHtml(employee.full_name || "")}</span>
+      <span>${escapeHtml(employee.rfc || "")}</span>
+      <span>${escapeHtml(employee.position || employee.department || "")}</span>
+    </div>
+  `;
+}
+
+function payrollPerceptionRow(item = {}) {
+  return `
+    <tr>
+      <td><input name="type" value="${escapeHtml(item.type || "001")}" required></td>
+      <td><input name="description" value="${escapeHtml(item.description || "Sueldos, salarios rayas y jornales")}" required></td>
+      <td><input name="taxable_amount" type="number" step="0.01" value="${escapeHtml(String(item.taxable_amount ?? 0))}" required></td>
+      <td><input name="exempt_amount" type="number" step="0.01" value="${escapeHtml(String(item.exempt_amount ?? 0))}" required></td>
+      <td><button class="ghost" type="button" data-action="remove-row">Quitar</button></td>
+    </tr>
+  `;
+}
+
+function payrollDeductionRow(item = {}) {
+  return `
+    <tr>
+      <td><input name="type" value="${escapeHtml(item.type || "002")}" required></td>
+      <td><input name="description" value="${escapeHtml(item.description || "ISR")}" required></td>
+      <td><input name="amount" type="number" step="0.01" value="${escapeHtml(String(item.amount ?? 0))}" required></td>
+      <td><button class="ghost" type="button" data-action="remove-row">Quitar</button></td>
+    </tr>
+  `;
+}
+
 function renderSettings() {
   return `
     <section class="panel">
@@ -501,8 +702,8 @@ function renderDocumentList(records, kind) {
   return `<div class="record-list">${records.map((item) => `
     <div class="record-row">
       <strong>${escapeHtml(item.folio || "")}</strong>
-      <span>${escapeHtml(item.client_name || item.receiver_name || "")}</span>
-      <span>${formatMoney(item.total || 0)}</span>
+      <span>${escapeHtml(item.client_name || item.receiver_name || item.employee_name || "")}</span>
+      <span>${formatMoney(item.total ?? item.net_total ?? 0)}</span>
       <div class="record-actions">
         ${canEmail ? emailButton(kind, item) : ""}
         <button class="ghost" data-print="${kind}" data-id="${item.id}">Imprimir</button>
@@ -521,6 +722,10 @@ function clientDatalist() {
   return `<datalist id="clients-list">${state.data.clients.map((client) => `<option value="${escapeHtml(client.name)}">${escapeHtml(client.rfc || "")}</option>`).join("")}</datalist>`;
 }
 
+function payrollEmployeeDatalist() {
+  return `<datalist id="payroll-employees-list">${state.data.payrollEmployees.map((employee) => `<option value="${escapeHtml(employee.full_name)}">${escapeHtml(employee.rfc || "")}</option>`).join("")}</datalist>`;
+}
+
 function bindEvents() {
   app.querySelectorAll("[data-tab]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -537,8 +742,11 @@ function bindEvents() {
   app.querySelector("#quote-form")?.addEventListener("submit", saveQuote);
   app.querySelector("#order-form")?.addEventListener("submit", saveOrder);
   app.querySelector("#invoice-form")?.addEventListener("submit", saveInvoice);
+  app.querySelector("#payroll-employee-form")?.addEventListener("submit", savePayrollEmployee);
+  app.querySelector("#payroll-form")?.addEventListener("submit", savePayrollReceipt);
   app.querySelector("#user-form")?.addEventListener("submit", createPortalUser);
   bindClientAutofill();
+  bindPayrollAutofill();
 
   app.querySelector('[data-action="add-quote-item"]')?.addEventListener("click", () => {
     const body = document.querySelector("#quote-items tbody");
@@ -553,6 +761,16 @@ function bindEvents() {
   app.querySelector('[data-action="add-invoice-item"]')?.addEventListener("click", () => {
     const body = document.querySelector("#invoice-items tbody");
     body.insertAdjacentHTML("beforeend", invoiceItemRow());
+    bindRowRemoveButtons(body);
+  });
+  app.querySelector('[data-action="add-payroll-perception"]')?.addEventListener("click", () => {
+    const body = document.querySelector("#payroll-perceptions tbody");
+    body.insertAdjacentHTML("beforeend", payrollPerceptionRow({ description: "", type: "" }));
+    bindRowRemoveButtons(body);
+  });
+  app.querySelector('[data-action="add-payroll-deduction"]')?.addEventListener("click", () => {
+    const body = document.querySelector("#payroll-deductions tbody");
+    body.insertAdjacentHTML("beforeend", payrollDeductionRow({ description: "", type: "" }));
     bindRowRemoveButtons(body);
   });
   app.querySelector('[data-action="load-imss-quote"]')?.addEventListener("click", loadRecoveredQuote);
@@ -668,18 +886,22 @@ async function sendDocumentEmail(kind, id, button) {
 
 async function loadCloudData() {
   await loadProfile();
-  const [clients, quotes, quoteItems, orders, invoices] = await Promise.all([
+  const [clients, quotes, quoteItems, orders, invoices, payrollEmployees, payrollReceipts] = await Promise.all([
     state.supabase.from("miluga_clients").select("*").order("created_at", { ascending: false }),
     state.supabase.from("miluga_quotes").select("*").order("created_at", { ascending: false }),
     state.supabase.from("miluga_quote_items").select("*").order("position", { ascending: true }),
     state.supabase.from("miluga_service_orders").select("*").order("created_at", { ascending: false }),
     state.supabase.from("miluga_invoices").select("*").order("created_at", { ascending: false }),
+    state.supabase.from("miluga_payroll_employees").select("*").order("created_at", { ascending: false }),
+    state.supabase.from("miluga_payroll_receipts").select("*").order("created_at", { ascending: false }),
   ]);
   state.data.clients = clients.data || [];
   state.data.quotes = quotes.data || [];
   state.data.quoteItems = quoteItems.data || [];
   state.data.orders = orders.data || [];
   state.data.invoices = invoices.data || [];
+  state.data.payrollEmployees = payrollEmployees.data || [];
+  state.data.payrollReceipts = payrollReceipts.data || [];
 }
 
 async function loadProfile() {
@@ -719,6 +941,8 @@ function loadLocalData() {
     quoteItems: saved.quoteItems || [],
     orders: saved.orders || [],
     invoices: saved.invoices || [],
+    payrollEmployees: saved.payrollEmployees || [],
+    payrollReceipts: saved.payrollReceipts || [],
     users: [],
   };
 }
@@ -871,13 +1095,105 @@ async function saveInvoice(event) {
   render();
 }
 
+async function savePayrollEmployee(event) {
+  event.preventDefault();
+  const payload = formObject(event.currentTarget);
+  payload.daily_salary = Number(payload.daily_salary || 0);
+  payload.base_salary = Number(payload.base_salary || 0);
+  payload.start_date = payload.start_date || null;
+  payload.active = true;
+
+  if (state.cloudReady) {
+    const { error } = await state.supabase.from("miluga_payroll_employees").insert(payload);
+    if (error) return alert(error.message);
+    await loadCloudData();
+  } else {
+    state.data.payrollEmployees.unshift({ ...payload, id: localId(), created_at: new Date().toISOString() });
+    saveLocalData();
+  }
+  state.tab = "payroll";
+  render();
+}
+
+async function savePayrollReceipt(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const base = formObject(form);
+  const employee = findPayrollEmployeeByName(base.employee_name) || {};
+
+  const perceptions = [...form.querySelectorAll("#payroll-perceptions tbody tr")].map((row) => ({
+    type: row.querySelector('[name="type"]').value.trim(),
+    description: row.querySelector('[name="description"]').value.trim(),
+    taxable_amount: Number(row.querySelector('[name="taxable_amount"]').value || 0),
+    exempt_amount: Number(row.querySelector('[name="exempt_amount"]').value || 0),
+  })).filter((item) => item.type && item.description);
+  const deductions = [...form.querySelectorAll("#payroll-deductions tbody tr")].map((row) => ({
+    type: row.querySelector('[name="type"]').value.trim(),
+    description: row.querySelector('[name="description"]').value.trim(),
+    amount: Number(row.querySelector('[name="amount"]').value || 0),
+  })).filter((item) => item.type && item.description);
+
+  if (!perceptions.length) return alert("Agrega al menos una percepcion.");
+
+  const totalPerceptions = sum(perceptions.map((item) => item.taxable_amount + item.exempt_amount));
+  const totalDeductions = sum(deductions.map((item) => item.amount));
+  const receipt = {
+    folio: await nextFolio("payroll"),
+    employee_id: base.employee_id || employee.id || null,
+    employee_number: employee.employee_number || "",
+    employee_name: base.employee_name,
+    employee_rfc: base.employee_rfc,
+    employee_curp: base.employee_curp,
+    employee_nss: base.employee_nss,
+    employee_regime: base.employee_regime,
+    employee_fiscal_zip: employee.fiscal_zip || "",
+    period_start: base.period_start,
+    period_end: base.period_end,
+    payment_date: base.payment_date,
+    paid_days: Number(base.paid_days || 0),
+    payroll_type: base.payroll_type || "O",
+    payment_frequency: base.payment_frequency,
+    contract_type: base.contract_type,
+    workday_type: employee.workday_type || "",
+    department: base.department,
+    position: base.position,
+    risk_class: employee.risk_class || "",
+    start_date: employee.start_date || null,
+    daily_salary: Number(base.daily_salary || 0),
+    base_salary: Number(base.base_salary || 0),
+    perceptions,
+    deductions,
+    other_payments: [],
+    total_perceptions: totalPerceptions,
+    total_deductions: totalDeductions,
+    total_other_payments: 0,
+    net_total: totalPerceptions - totalDeductions,
+    status: "pre_timbrado",
+  };
+  receipt.xml_preview = buildPayrollXmlPreview(receipt);
+
+  if (state.cloudReady) {
+    const { data, error } = await state.supabase.from("miluga_payroll_receipts").insert(receipt).select().single();
+    if (error) return alert(error.message);
+    await loadCloudData();
+    printPayrollReceipt(data);
+  } else {
+    const saved = { ...receipt, id: localId(), created_at: new Date().toISOString() };
+    state.data.payrollReceipts.unshift(saved);
+    saveLocalData();
+    printPayrollReceipt(saved);
+  }
+  state.tab = "payroll";
+  render();
+}
+
 async function nextFolio(kind) {
   if (state.cloudReady) {
     const { data, error } = await state.supabase.rpc("next_miluga_folio", { p_kind: kind });
     if (!error && data) return data;
   }
-  const prefixes = { quote: "COT", order: "OS", invoice: "FAC" };
-  const key = kind === "quote" ? "quotes" : kind === "order" ? "orders" : "invoices";
+  const prefixes = { quote: "COT", order: "OS", invoice: "FAC", payroll: "NOM" };
+  const key = kind === "quote" ? "quotes" : kind === "order" ? "orders" : kind === "payroll" ? "payrollReceipts" : "invoices";
   const number = state.data[key].length + 1;
   return `${prefixes[kind]}-${String(number).padStart(4, "0")}`;
 }
@@ -930,6 +1246,20 @@ function bindClientAutofill() {
   bindClientLookup(app.querySelector("#invoice-form"), "receiver_name", fillInvoiceClient);
 }
 
+function bindPayrollAutofill() {
+  const form = app.querySelector("#payroll-form");
+  const input = form?.elements?.employee_name;
+  if (!input) return;
+
+  const applySelectedEmployee = () => {
+    const employee = findPayrollEmployeeByName(input.value);
+    if (employee) fillPayrollEmployee(form, employee);
+  };
+
+  input.addEventListener("input", applySelectedEmployee);
+  input.addEventListener("change", applySelectedEmployee);
+}
+
 function bindClientLookup(form, fieldName, fillClient) {
   const input = form?.elements?.[fieldName];
   if (!input) return;
@@ -965,6 +1295,20 @@ function fillInvoiceClient(form, client) {
   setFieldValue(form, "receiver_zip", client.fiscal_zip);
 }
 
+function fillPayrollEmployee(form, employee) {
+  setFieldValue(form, "employee_id", employee.id);
+  setFieldValue(form, "employee_rfc", employee.rfc);
+  setFieldValue(form, "employee_curp", employee.curp);
+  setFieldValue(form, "employee_nss", employee.nss);
+  setFieldValue(form, "employee_regime", employee.employee_regime);
+  setFieldValue(form, "payment_frequency", employee.payment_frequency);
+  setFieldValue(form, "contract_type", employee.contract_type);
+  setFieldValue(form, "department", employee.department);
+  setFieldValue(form, "position", employee.position);
+  setFieldValue(form, "daily_salary", employee.daily_salary);
+  setFieldValue(form, "base_salary", employee.base_salary);
+}
+
 function setFieldValue(form, fieldName, value) {
   const field = form?.elements?.[fieldName];
   if (field && value) field.value = value;
@@ -974,6 +1318,12 @@ function findClientByName(name) {
   const normalized = normalizeClientName(name);
   if (!normalized) return null;
   return state.data.clients.find((client) => normalizeClientName(client.name) === normalized) || null;
+}
+
+function findPayrollEmployeeByName(name) {
+  const normalized = normalizeClientName(name);
+  if (!normalized) return null;
+  return state.data.payrollEmployees.find((employee) => normalizeClientName(employee.full_name) === normalized) || null;
 }
 
 function normalizeClientName(value) {
@@ -988,6 +1338,7 @@ function printRecord(kind, id) {
   }
   if (kind === "order") printOrder(state.data.orders.find((item) => item.id === id));
   if (kind === "invoice") printInvoice(state.data.invoices.find((item) => item.id === id));
+  if (kind === "payroll") printPayrollReceipt(state.data.payrollReceipts.find((item) => item.id === id));
 }
 
 function printQuote(quote, items) {
@@ -1048,6 +1399,35 @@ function printInvoice(invoice) {
   `);
 }
 
+function printPayrollReceipt(receipt) {
+  const perceptions = receipt?.perceptions || [];
+  const deductions = receipt?.deductions || [];
+  openPrintWindow(`Nomina ${receipt?.folio || ""}`, `
+    ${documentHeader("Recibo de nomina", receipt?.folio)}
+    ${infoGrid([
+      ["Empleado", receipt?.employee_name],
+      ["RFC", receipt?.employee_rfc],
+      ["CURP", receipt?.employee_curp],
+      ["NSS", receipt?.employee_nss],
+      ["Periodo", `${receipt?.period_start || ""} al ${receipt?.period_end || ""}`],
+      ["Fecha pago", receipt?.payment_date],
+      ["Dias pagados", receipt?.paid_days],
+      ["Estado", receipt?.status === "timbrado" ? "Timbrado" : "Pre-timbrado"],
+    ])}
+    <h2>Percepciones</h2>
+    ${table(["Tipo", "Concepto", "Gravado", "Exento", "Importe"], perceptions.map((item) => [
+      item.type, item.description, formatMoney(item.taxable_amount), formatMoney(item.exempt_amount), formatMoney(Number(item.taxable_amount || 0) + Number(item.exempt_amount || 0)),
+    ]))}
+    <h2>Deducciones</h2>
+    ${table(["Tipo", "Concepto", "Importe"], deductions.map((item) => [
+      item.type, item.description, formatMoney(item.amount),
+    ]))}
+    ${payrollTotalsBlock(receipt)}
+    <h2>XML preliminar</h2>
+    <pre>${escapeHtml(receipt?.xml_preview || "")}</pre>
+  `);
+}
+
 function documentHeader(title, folio) {
   return `
     <header class="doc-head">
@@ -1077,6 +1457,16 @@ function totalsBlock(record) {
       <div><span>Subtotal</span><strong>${formatMoney(record.subtotal || 0)}</strong></div>
       <div><span>IVA</span><strong>${formatMoney(record.tax || 0)}</strong></div>
       <div class="grand"><span>Total</span><strong>${formatMoney(record.total || 0)}</strong></div>
+    </div>
+  `;
+}
+
+function payrollTotalsBlock(record) {
+  return `
+    <div class="totals">
+      <div><span>Total percepciones</span><strong>${formatMoney(record?.total_perceptions || 0)}</strong></div>
+      <div><span>Total deducciones</span><strong>${formatMoney(record?.total_deductions || 0)}</strong></div>
+      <div class="grand"><span>Neto a pagar</span><strong>${formatMoney(record?.net_total || 0)}</strong></div>
     </div>
   `;
 }
@@ -1122,6 +1512,43 @@ function buildXmlPreview(base, items, subtotal, tax) {
 </cfdi:Comprobante>`;
 }
 
+function buildPayrollXmlPreview(receipt) {
+  const perceptions = receipt.perceptions || [];
+  const deductions = receipt.deductions || [];
+  const taxable = sum(perceptions.map((item) => item.taxable_amount));
+  const exempt = sum(perceptions.map((item) => item.exempt_amount));
+  const totalDeductions = Number(receipt.total_deductions || 0);
+  const taxWithheld = sum(deductions.filter((item) => item.type === "002").map((item) => item.amount));
+  const otherDeductions = Math.max(totalDeductions - taxWithheld, 0);
+  const subtotal = Number(receipt.total_perceptions || 0);
+  const total = Number(receipt.net_total || 0);
+  const folio = String(receipt.folio || "BORRADOR").replace(/^NOM-?/, "");
+  const now = new Date().toISOString().slice(0, 19);
+  const perceptionNodes = perceptions.map((item, index) => `
+        <nomina12:Percepcion TipoPercepcion="${escapeXml(item.type)}" Clave="${String(index + 1).padStart(3, "0")}" Concepto="${escapeXml(item.description)}" ImporteGravado="${moneyXml(item.taxable_amount)}" ImporteExento="${moneyXml(item.exempt_amount)}" />`).join("");
+  const deductionNodes = deductions.map((item, index) => `
+        <nomina12:Deduccion TipoDeduccion="${escapeXml(item.type)}" Clave="${String(index + 1).padStart(3, "0")}" Concepto="${escapeXml(item.description)}" Importe="${moneyXml(item.amount)}" />`).join("");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:nomina12="http://www.sat.gob.mx/nomina12" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd http://www.sat.gob.mx/nomina12 http://www.sat.gob.mx/sitio_internet/cfd/nomina/nomina12.xsd" Version="4.0" Serie="NOM" Folio="${escapeXml(folio)}" Fecha="${now}" Sello="PENDIENTE_DE_CSD" NoCertificado="PENDIENTE_DE_CSD" Certificado="PENDIENTE_DE_CSD" SubTotal="${moneyXml(subtotal)}" Descuento="${moneyXml(totalDeductions)}" Moneda="MXN" Total="${moneyXml(total)}" TipoDeComprobante="N" Exportacion="01" MetodoPago="PUE" LugarExpedicion="PENDIENTE">
+  <cfdi:Emisor Rfc="${COMPANY.rfc}" Nombre="${escapeXml(COMPANY.name)}" RegimenFiscal="601" />
+  <cfdi:Receptor Rfc="${escapeXml(receipt.employee_rfc)}" Nombre="${escapeXml(receipt.employee_name)}" DomicilioFiscalReceptor="${escapeXml(receipt.employee_fiscal_zip || "PENDIENTE")}" RegimenFiscalReceptor="605" UsoCFDI="CN01" />
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="84111505" Cantidad="1" ClaveUnidad="ACT" Descripcion="Pago de nomina" ValorUnitario="${moneyXml(subtotal)}" Importe="${moneyXml(subtotal)}" Descuento="${moneyXml(totalDeductions)}" ObjetoImp="01" />
+  </cfdi:Conceptos>
+  <cfdi:Complemento>
+    <nomina12:Nomina Version="1.2" TipoNomina="${escapeXml(receipt.payroll_type || "O")}" FechaPago="${escapeXml(receipt.payment_date)}" FechaInicialPago="${escapeXml(receipt.period_start)}" FechaFinalPago="${escapeXml(receipt.period_end)}" NumDiasPagados="${Number(receipt.paid_days || 0).toFixed(3)}" TotalPercepciones="${moneyXml(subtotal)}" TotalDeducciones="${moneyXml(totalDeductions)}">
+      <nomina12:Emisor />
+      <nomina12:Receptor Curp="${escapeXml(receipt.employee_curp)}" NumSeguridadSocial="${escapeXml(receipt.employee_nss || "")}" FechaInicioRelLaboral="${escapeXml(receipt.start_date || "")}" TipoContrato="${escapeXml(receipt.contract_type || "")}" TipoJornada="${escapeXml(receipt.workday_type || "")}" TipoRegimen="${escapeXml(receipt.employee_regime || "02")}" NumEmpleado="${escapeXml(receipt.employee_number || "PENDIENTE")}" Departamento="${escapeXml(receipt.department || "")}" Puesto="${escapeXml(receipt.position || "")}" RiesgoPuesto="${escapeXml(receipt.risk_class || "")}" PeriodicidadPago="${escapeXml(receipt.payment_frequency || "")}" SalarioBaseCotApor="${moneyXml(receipt.base_salary)}" SalarioDiarioIntegrado="${moneyXml(receipt.daily_salary)}" ClaveEntFed="JAL" />
+      <nomina12:Percepciones TotalSueldos="${moneyXml(subtotal)}" TotalGravado="${moneyXml(taxable)}" TotalExento="${moneyXml(exempt)}">${perceptionNodes}
+      </nomina12:Percepciones>${deductions.length ? `
+      <nomina12:Deducciones TotalOtrasDeducciones="${moneyXml(otherDeductions)}" TotalImpuestosRetenidos="${moneyXml(taxWithheld)}">${deductionNodes}
+      </nomina12:Deducciones>` : ""}
+    </nomina12:Nomina>
+  </cfdi:Complemento>
+</cfdi:Comprobante>`;
+}
+
 function formObject(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
@@ -1133,6 +1560,10 @@ function formatMoney(value) {
 function formatDate(value) {
   if (!value) return new Date().toLocaleDateString("es-MX");
   return new Date(value).toLocaleDateString("es-MX");
+}
+
+function moneyXml(value) {
+  return Number(value || 0).toFixed(2);
 }
 
 function roleLabel(role) {
